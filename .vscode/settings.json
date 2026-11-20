@@ -1,0 +1,38 @@
+{
+  "oxc.enable": true,
+  "eslint.enable": false,
+  "prettier.enable": false,
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "oxc.oxc-vscode",
+  "editor.codeActionsOnSave": {
+    "source.format.oxc": "explicit",
+    "source.fixAll.oxc": "explicit"
+  },
+  // Disabled to make Vue.volar happy
+  "js/ts.experimental.useTsgo": false,
+  // "js/ts.tsdk.path": "node_modules/typescript",
+  "cSpell.words": [
+    "bumpp",
+    "changelogithub",
+    "codecov",
+    "esbuild",
+    "giget",
+    "iconify",
+    "lcov",
+    "lucide",
+    "nums",
+    "oxfmt",
+    "oxlint",
+    "pnpm",
+    "Shiki",
+    "shikijs",
+    "tsdown",
+    "tsgo",
+    "unrs",
+    "vite",
+    "vitepress",
+    "vitest",
+    "vueuse"
+  ],
+  "cSpell.allowCompoundWords": true
+}

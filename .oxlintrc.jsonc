@@ -1,0 +1,79 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "eslint",
+    "import",
+    "jsdoc",
+    "node",
+    "promise",
+    "oxc",
+    "typescript",
+    "unicorn",
+  ],
+  "jsPlugins": ["./scripts/oxlint.ts"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "pedantic": "off",
+    "perf": "warn",
+    "style": "off",
+    "restriction": "off",
+    "nursery": "off",
+  },
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/node_modules/**",
+    "**/fixtures/**",
+    "**/__snapshots__/**",
+  ],
+  "rules": {
+    "jsdoc/require-property-type": "off",
+    "curly": ["error", "all"],
+    "func-style": ["error", "declaration", { "allowArrowFunctions": true }],
+    "no-duplicate-imports": [
+      "error",
+      { "includeExports": false, "allowSeparateTypeImports": true },
+    ],
+    "one-var": ["error", "never"],
+  },
+  "overrides": [
+    {
+      "files": ["*.config.{ts,mjs,mts}"],
+      "rules": {
+        "sort-keys": "error",
+      },
+    },
+    {
+      "files": [
+        "**/types.ts",
+        "**/types/*.ts",
+        "**/constants.ts",
+        "**/constants/*.ts",
+        "**/utils.ts",
+        "**/utils/*.ts",
+      ],
+      "rules": {
+        "local/require-top-level-jsdoc": "error",
+        "jsdoc/no-blank-blocks": "error",
+        "jsdoc/require-param": "error",
+        "jsdoc/require-param-name": "error",
+        "jsdoc/require-param-description": "error",
+        "jsdoc/require-returns": "error",
+        "jsdoc/require-returns-description": "error",
+      },
+    },
+    {
+      "files": ["*.d.ts"],
+      "rules": {
+        "unicorn/require-module-specifiers": "off",
+      },
+    },
+    {
+      "files": ["*.{spec,test}.{js,ts,tsx}", "*.{spec,test}-d.{ts,tsx}"],
+      "plugins": ["vitest"],
+      "rules": {
+        "typescript/require-array-sort-compare": "off",
+      },
+    },
+  ],
+}

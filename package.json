@@ -1,0 +1,89 @@
+{
+  "name": "vue-tweakpane",
+  "version": "0.0.0",
+  "description": "Vue 3 composables for Tweakpane and live parameter tuning.",
+  "keywords": [
+    "control-panel",
+    "parameter-tuning",
+    "tweakpane",
+    "vue",
+    "vue-composables",
+    "vue3"
+  ],
+  "homepage": "https://github.com/ntnyq/vue-tweakpane#readme",
+  "bugs": {
+    "url": "https://github.com/ntnyq/vue-tweakpane/issues"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "ntnyq",
+    "email": "ntnyq13@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ntnyq/vue-tweakpane.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint": "oxlint",
+    "play:build": "pnpm -C playground run build",
+    "play:dev": "pnpm -C playground run dev",
+    "prepare": "husky",
+    "prepublishOnly": "pnpm run build",
+    "release": "run-s release:check release:version",
+    "release:check": "run-s format:check lint typecheck test",
+    "release:version": "bumpp",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tweakpane/core": "^2.0.5"
+  },
+  "devDependencies": {
+    "@ntnyq/tsconfig": "^3.1.0",
+    "@ntnyq/utils": "^0.27.0",
+    "@types/node": "^26.6.6",
+    "bumpp": "^12.3.0",
+    "changelogithub": "^15.0.5",
+    "happy-dom": "^21.0.4",
+    "husky": "^9.1.7",
+    "nano-staged": "^1.0.2",
+    "npm-run-all2": "^9.1.0",
+    "oxfmt": "^0.79.0",
+    "oxlint": "^1.94.0",
+    "tsdown": "^0.23.7",
+    "tweakpane": "^4.0.5",
+    "typescript": "^7.1.0-beta",
+    "vitest": "^5.1.1",
+    "vue": "^3.5.46"
+  },
+  "peerDependencies": {
+    "tweakpane": "^4.0.5",
+    "vue": "^3.5.0"
+  },
+  "nano-staged": {
+    "*.{js,ts,mjs,tsx}": "oxlint --fix --no-error-on-unmatched-pattern",
+    "*": "oxfmt --no-error-on-unmatched-pattern"
+  },
+  "packageManager": "pnpm@12.21.0"
+}

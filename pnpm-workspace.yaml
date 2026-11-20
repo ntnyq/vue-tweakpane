@@ -1,0 +1,16 @@
+packages:
+  - playground
+
+minimumReleaseAge: 0
+ignoreWorkspaceRootCheck: true
+shellEmulator: true
+pmOnFail: warn
+
+packageExtensions:
+  tweakpane@4.0.5:
+    dependencies:
+      '@tweakpane/core': ^2.0.5
+
+overrides:
+  # changelogithub pulls the deprecated tar 6 through giget.
+  'giget@1.2.5>tar': 7.5.23

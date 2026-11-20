@@ -1,0 +1,81 @@
+:root {
+  color-scheme: light;
+  --page: #f0f2f4;
+  --surface: #fafbfc;
+  --panel: #f4f6f8;
+  --field: #e7ebee;
+  --hover: #e0e6e9;
+  --border: #cdd4da;
+  --ink: #20282f;
+  --muted: #57636e;
+  --accent: #23674f;
+  --accent-fill: #dcece4;
+  --chart-grid: #d5dde2;
+  --chart-axis: #84929d;
+  --chart-trace: #287b61;
+  --radius: 5px;
+  --mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
+
+  /* Tweakpane reads these variables from its host. */
+  --tp-base-background-color: var(--panel);
+  --tp-base-border-radius: var(--radius);
+  --tp-base-font-family: var(--mono);
+  --tp-base-shadow-color: transparent;
+  --tp-blade-border-radius: 3px;
+  --tp-blade-value-width: 59%;
+  --tp-button-background-color: var(--accent-fill);
+  --tp-button-background-color-active: var(--hover);
+  --tp-button-background-color-focus: var(--hover);
+  --tp-button-background-color-hover: var(--hover);
+  --tp-button-foreground-color: var(--accent);
+  --tp-container-background-color: var(--field);
+  --tp-container-background-color-active: var(--hover);
+  --tp-container-background-color-focus: var(--hover);
+  --tp-container-background-color-hover: var(--hover);
+  --tp-container-foreground-color: var(--ink);
+  --tp-container-horizontal-padding: 5px;
+  --tp-container-unit-size: 21px;
+  --tp-container-unit-spacing: 4px;
+  --tp-container-vertical-padding: 5px;
+  --tp-groove-foreground-color: var(--border);
+  --tp-input-background-color: var(--field);
+  --tp-input-background-color-active: var(--hover);
+  --tp-input-background-color-focus: var(--hover);
+  --tp-input-background-color-hover: var(--hover);
+  --tp-input-foreground-color: var(--ink);
+  --tp-label-foreground-color: var(--muted);
+  --tp-monitor-background-color: var(--surface);
+  --tp-monitor-foreground-color: var(--accent);
+
+  background: var(--page);
+  color: var(--ink);
+  font:
+    13px/1.45 system-ui,
+    sans-serif;
+}
+
+:root.dark {
+  color-scheme: dark;
+  --page: #1b1f24;
+  --surface: #161a1f;
+  --panel: #24292f;
+  --field: #30373f;
+  --hover: #3a444d;
+  --border: #39434c;
+  --ink: #e8edf1;
+  --muted: #a9b5bf;
+  --accent: #a0dbc5;
+  --accent-fill: #293d37;
+  --chart-grid: #2a353f;
+  --chart-axis: #677986;
+  --chart-trace: #9bdcc4;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
