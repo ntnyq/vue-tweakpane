@@ -1,6 +1,6 @@
 {
   "name": "vue-tweakpane",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Vue 3 composables and template components for Tweakpane and live parameter tuning.",
   "keywords": [
     "control-panel",
