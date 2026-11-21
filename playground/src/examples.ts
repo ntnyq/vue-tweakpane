@@ -3,6 +3,7 @@ import LayoutPresets from './examples/LayoutPresets.vue'
 import MotionStage from './examples/MotionStage.vue'
 import PaneLifecycle from './examples/PaneLifecycle.vue'
 import SignalStudio from './examples/SignalStudio.vue'
+import TemplateLayout from './examples/TemplateLayout.vue'
 
 export const EXAMPLES = {
   signal: {
@@ -52,6 +53,16 @@ export const EXAMPLES = {
     component: PaneLifecycle,
     loadSource: () =>
       import('./examples/PaneLifecycle.vue?raw&highlight').then(
+        file => file.default,
+      ),
+  },
+  template: {
+    label: 'Template layout',
+    icon: 'i-lucide:list-tree',
+    filename: 'TemplateLayout.vue',
+    component: TemplateLayout,
+    loadSource: () =>
+      import('./examples/TemplateLayout.vue?raw&highlight').then(
         file => file.default,
       ),
   },

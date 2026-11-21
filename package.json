@@ -1,7 +1,7 @@
 {
   "name": "vue-tweakpane",
   "version": "0.0.0",
-  "description": "Vue 3 composables for Tweakpane and live parameter tuning.",
+  "description": "Vue 3 composables and template components for Tweakpane and live parameter tuning.",
   "keywords": [
     "control-panel",
     "parameter-tuning",
@@ -35,6 +35,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./components": {
+      "types": "./dist/components.d.ts",
+      "default": "./dist/components.js"
     }
   },
   "publishConfig": {
@@ -54,7 +58,7 @@
     "release:check": "run-s format:check lint typecheck test",
     "release:version": "bumpp",
     "test": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "vue-tsc --noEmit && vue-tsc --noEmit -p playground"
   },
   "dependencies": {
     "@tweakpane/core": "^2.0.5"
@@ -73,9 +77,12 @@
     "oxlint": "^1.94.0",
     "tsdown": "^0.23.7",
     "tweakpane": "^4.0.5",
-    "typescript": "^7.1.0-beta",
+    "typescript": "^6.0.3",
+    "unplugin-vue": "^8.0.1",
     "vitest": "^5.1.1",
-    "vue": "^3.5.46"
+    "vue": "^3.5.46",
+    "vue-runtime-types": "npm:@vue/runtime-dom@3.5.0",
+    "vue-tsc": "^3.3.14"
   },
   "peerDependencies": {
     "tweakpane": "^4.0.5",

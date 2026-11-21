@@ -5,7 +5,7 @@
 [![NPM DOWNLOADS](https://img.shields.io/npm/dy/vue-tweakpane.svg)](https://www.npmjs.com/package/vue-tweakpane)
 [![LICENSE](https://img.shields.io/github/license/ntnyq/vue-tweakpane.svg)](https://github.com/ntnyq/vue-tweakpane/blob/main/LICENSE)
 
-Vue 3 composables for managing a Tweakpane panel and synchronizing its controls with Vue state.
+Vue 3 composables and template components for managing a Tweakpane panel and synchronizing its controls with Vue state.
 
 ## Install
 
@@ -87,6 +87,59 @@ useTweakpane(hostRef, {
   },
 })
 ```
+
+## Template components
+
+Import `TweakPane`, `TweakFolder`, `TweakBinding`, `TweakButton`, and `TweakBlade`
+from `vue-tweakpane/components` to lay out controls in a Vue template.
+
+```vue
+<script setup lang="ts">
+import { shallowRef } from 'vue'
+import {
+  TweakBinding,
+  TweakButton,
+  TweakFolder,
+  TweakPane,
+} from 'vue-tweakpane/components'
+
+const quality = shallowRef<'low' | 'high'>('low')
+const showSpeed = shallowRef(true)
+const speed = shallowRef(1)
+</script>
+
+<template>
+  <TweakPane title="Scene">
+    <TweakFolder title="Rendering">
+      <TweakBinding
+        v-model="quality"
+        :params="{ label: 'Quality', options: { Low: 'low', High: 'high' } }"
+      />
+      <TweakBinding
+        v-if="showSpeed"
+        v-model="speed"
+        :params="{ label: 'Speed', min: 0, max: 4 }"
+      />
+      <TweakButton
+        title="Toggle speed"
+        @click="showSpeed = !showSpeed"
+      />
+    </TweakFolder>
+  </TweakPane>
+</template>
+```
+
+`TweakBinding` infers its value type from `v-model` and accepts the same writable
+binding options as `useTweakBinding()`. Add stable keys to `v-for` items so Vue
+preserves their identity across reorders. Reordering can recreate some native
+controls and reset their focus or plugin state. Vue model values are preserved.
+Options such as `params`, `title`, `expanded`, and `plugins` are read at
+creation. Change a component's `key` to recreate it with new options.
+
+Pass plugin bundles as `:plugins="[MyPlugin]"` on `TweakPane`. `TweakBlade`
+receives a factory through `create`. Use the supplied index and return the
+native blade so the component can dispose it. For example,
+`:create="(rack, index) => rack.addBlade({ view: 'separator', index })"`.
 
 ## Playground
 

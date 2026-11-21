@@ -46,10 +46,17 @@ function sourcePreview(): Plugin {
 export default defineConfig({
   plugins: [sourcePreview(), UnoCSS(), vue()],
   resolve: {
-    alias: {
-      'vue-tweakpane': fileURLToPath(
-        new URL('../src/index.ts', import.meta.url),
-      ),
-    },
+    alias: [
+      {
+        find: /^vue-tweakpane$/,
+        replacement: fileURLToPath(new URL('../src/index.ts', import.meta.url)),
+      },
+      {
+        find: /^vue-tweakpane\/components$/,
+        replacement: fileURLToPath(
+          new URL('../src/components/index.ts', import.meta.url),
+        ),
+      },
+    ],
   },
 })

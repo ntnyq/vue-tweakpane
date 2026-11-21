@@ -2,7 +2,8 @@
   "extends": "../tsconfig.json",
   "compilerOptions": {
     "paths": {
-      "vue-tweakpane": ["../src/index.ts"]
+      "vue-tweakpane": ["../src/index.ts"],
+      "vue-tweakpane/components": ["../src/components/index.ts"]
     }
   },
   "include": ["src", "*.ts"]
