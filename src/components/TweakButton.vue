@@ -17,12 +17,25 @@ const anchorRef = useTemplateRef<HTMLElement>('anchor')
 
 useRackEntry(anchorRef, (rack, index) => {
   const button = rack.addButton({ title: props.title, index })
-  const onClick = () => emit('click')
-  button.on('click', onClick)
+  const { emitter } = button.controller.buttonController
+  const disposed = button.controller.viewProps.value('disposed')
 
-  return () => {
-    button.off('click', onClick)
-    button.dispose()
+  function onClick() {
+    if (!disposed.rawValue) {
+      emit('click')
+    }
+  }
+
+  // Tweakpane wraps ButtonApi listeners, so ButtonApi.off cannot remove them.
+  emitter.on('click', onClick)
+
+  return {
+    blade: button,
+
+    dispose() {
+      emitter.off('click', onClick)
+      button.dispose()
+    },
   }
 })
 </script>

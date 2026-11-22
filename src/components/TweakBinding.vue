@@ -20,15 +20,17 @@ useRackEntry(anchorRef, (rack, index) => {
   const scope = effectScope(true)
 
   try {
-    scope.run(() => {
-      useTweakBinding(rack, model, { ...props.params, index })
-    })
+    const binding = scope.run(() =>
+      useTweakBinding(rack, model, { ...props.params, index }),
+    )
+    return {
+      blade: binding?.value ?? null,
+      dispose: () => scope.stop(),
+    }
   } catch (error) {
     scope.stop()
     throw error
   }
-
-  return () => scope.stop()
 })
 </script>
 

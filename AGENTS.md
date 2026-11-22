@@ -22,7 +22,7 @@ Use strict TypeScript, two-space indentation, single quotes, trailing commas, an
 
 ## Testing Guidelines
 
-Put runtime tests in `tests/*.test.ts` and use happy-dom for tests that mount Vue or interact with pane controls. Cover binding changes in both directions and verify cleanup when panes are replaced or disposed. Put public type assertions in `tests/*.test-d.ts` and check them with `pnpm typecheck`. To run a single runtime file, use `pnpm test tests/index.test.ts`.
+Put runtime tests in `tests/*.test.ts` and use happy-dom for tests that mount Vue or interact with pane controls. Cover binding changes in both directions and verify cleanup when panes are replaced or disposed. Put public TypeScript assertions in `tests/*.test-d.ts` and Vue template type assertions in `tests/*.test-d.vue`. `pnpm typecheck` checks both. To run a single runtime file, use `pnpm test tests/index.test.ts`.
 
 ## Commit & Pull Request Guidelines
 

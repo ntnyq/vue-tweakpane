@@ -1,9 +1,18 @@
 // @vitest-environment happy-dom
 
+import { BladeApi, BladeController, createPlugin } from '@tweakpane/core'
+import type { BaseBladeParams, BladePlugin } from '@tweakpane/core'
 import { Pane } from 'tweakpane'
-import type { BladeApi, FolderApi } from 'tweakpane'
+import type { FolderApi } from 'tweakpane'
 import { expect, it, vi } from 'vitest'
-import { createApp, Fragment, h, nextTick, shallowRef } from 'vue'
+import {
+  createApp,
+  Fragment,
+  h,
+  nextTick,
+  shallowReactive,
+  shallowRef,
+} from 'vue'
 import {
   TweakBinding,
   TweakBlade,
@@ -32,6 +41,10 @@ function inputFor(host: HTMLElement, name: string) {
 function editInput(input: HTMLInputElement, value: string) {
   input.value = value
   input.dispatchEvent(new Event('change'))
+}
+
+function nativeButtons(host: HTMLElement) {
+  return [...host.querySelectorAll<HTMLButtonElement>('button.tp-btnv_b')]
 }
 
 it('inserts a conditional binding and reorders keyed controls without losing their models', async () => {
@@ -99,6 +112,543 @@ it('inserts a conditional binding and reorders keyed controls without losing the
     showB.value = false
     await nextTick()
     expect(bindingLabels(host)).toEqual(['C', 'A'])
+  } finally {
+    app.unmount()
+  }
+})
+
+it('mounts later controls after a dynamic blade factory fails and retries in order', async () => {
+  const host = document.createElement('div')
+  const showBlade = shallowRef(false)
+  const buttons = shallowRef(['Tail'])
+  const click = vi.fn<() => void>()
+  const onError = vi.fn<(error: unknown) => void>()
+  const error = new Error('Blade factory failed')
+  let shouldFail = true
+
+  function create(rack: Pane | FolderApi, index: number) {
+    const blade = rack.addButton({ title: 'Blade', index })
+    if (shouldFail) {
+      blade.dispose()
+      throw error
+    }
+    return blade
+  }
+
+  const app = createApp({
+    setup: () => () =>
+      h(TweakPane, null, () => [
+        showBlade.value ? h(TweakBlade, { create }) : null,
+        ...buttons.value.map(title =>
+          h(TweakButton, { key: title, title, onClick: click }),
+        ),
+      ]),
+  })
+  app.config.errorHandler = onError
+
+  app.mount(host)
+  try {
+    const [tail] = nativeButtons(host)
+    showBlade.value = true
+    buttons.value = ['Next', 'Tail']
+    await nextTick()
+
+    expect(onError).toHaveBeenCalledTimes(1)
+    expect(onError.mock.calls[0]?.[0]).toBe(error)
+    expect(nativeButtons(host).map(button => button.textContent)).toEqual([
+      'Next',
+      'Tail',
+    ])
+    const [next, retainedTail] = nativeButtons(host)
+    expect(retainedTail).toBe(tail)
+    next?.click()
+    expect(click).toHaveBeenCalledOnce()
+
+    shouldFail = false
+    buttons.value = ['Next', 'Tail', 'Added']
+    await nextTick()
+    expect(nativeButtons(host).map(button => button.textContent)).toEqual([
+      'Blade',
+      'Next',
+      'Tail',
+      'Added',
+    ])
+    expect(nativeButtons(host)[1]).toBe(next)
+  } finally {
+    app.unmount()
+  }
+})
+
+it('keeps valid controls when a blade fails in a dynamically inserted folder', async () => {
+  const host = document.createElement('div')
+  const showFolder = shallowRef(false)
+  const click = vi.fn<() => void>()
+  const error = new Error('Nested blade factory failed')
+  const titlesAtError: (string | null)[][] = []
+
+  const onError = vi.fn<(error: unknown) => void>(() => {
+    titlesAtError.push(nativeButtons(host).map(button => button.textContent))
+  })
+  const app = createApp({
+    setup: () => () =>
+      h(TweakPane, null, () =>
+        showFolder.value
+          ? [
+              h(TweakFolder, { title: 'Options' }, () => [
+                h(TweakButton, { title: 'Before' }),
+                h(TweakBlade, {
+                  create() {
+                    throw error
+                  },
+                }),
+                h(TweakButton, { title: 'After', onClick: click }),
+              ]),
+              h(TweakButton, { title: 'Outside' }),
+            ]
+          : [],
+      ),
+  })
+  app.config.errorHandler = onError
+
+  app.mount(host)
+  try {
+    showFolder.value = true
+    await nextTick()
+
+    expect(onError).toHaveBeenCalledTimes(1)
+    expect(onError.mock.calls[0]?.[0]).toBe(error)
+    expect(titlesAtError[0]).toEqual(['Before', 'After', 'Outside'])
+    expect(host.querySelector('button.tp-fldv_b')?.textContent).toBe('Options')
+    expect(nativeButtons(host).map(button => button.textContent)).toEqual([
+      'Before',
+      'After',
+      'Outside',
+    ])
+    nativeButtons(host)[1]?.click()
+    expect(click).toHaveBeenCalledOnce()
+  } finally {
+    app.unmount()
+  }
+})
+
+it('finishes reordering a rack before reporting a control cleanup error', async () => {
+  const host = document.createElement('div')
+  const reordered = shallowRef(false)
+  const error = new Error('Blade cleanup failed')
+  const titlesAtError: (string | null)[][] = []
+  const onError = vi.fn<(cause: unknown) => void>(() => {
+    titlesAtError.push(nativeButtons(host).map(button => button.textContent))
+  })
+  let needsError = true
+
+  function create(rack: Pane | FolderApi, index: number) {
+    const button = rack.addButton({ title: 'Blade', index })
+    const dispose = button.dispose.bind(button)
+    button.dispose = () => {
+      if (needsError) {
+        needsError = false
+        throw error
+      }
+      dispose()
+    }
+    return button
+  }
+
+  const app = createApp({
+    setup: () => () =>
+      h(TweakPane, null, () => {
+        const blade = h(TweakBlade, { key: 'blade', create })
+        const first = h(TweakButton, { key: 'first', title: 'First' })
+        const second = h(TweakButton, { key: 'second', title: 'Second' })
+        const last = h(TweakButton, { key: 'last', title: 'Last' })
+        return reordered.value
+          ? [first, second, blade, last]
+          : [blade, first, second]
+      }),
+  })
+  app.config.errorHandler = onError
+
+  app.mount(host)
+  try {
+    const [, first, second] = nativeButtons(host)
+    reordered.value = true
+    await nextTick()
+
+    expect(onError).toHaveBeenCalledExactlyOnceWith(
+      error,
+      expect.anything(),
+      expect.any(String),
+    )
+    expect(nativeButtons(host).map(button => button.textContent)).toEqual([
+      'First',
+      'Second',
+      'Blade',
+      'Last',
+    ])
+    expect(titlesAtError).toEqual([['First', 'Second', 'Blade', 'Last']])
+    expect(nativeButtons(host)[0]).toBe(first)
+    expect(nativeButtons(host)[1]).toBe(second)
+  } finally {
+    app.unmount()
+  }
+})
+
+it('releases Vue controls when their native folder is disposed directly', () => {
+  const host = document.createElement('div')
+  const click = vi.fn<() => void>()
+  const release = vi.fn<() => void>()
+  let folder: Pane | FolderApi | undefined
+
+  const app = createApp({
+    setup: () => () =>
+      h(TweakPane, null, () =>
+        h(TweakFolder, { title: 'Options' }, () => [
+          h(TweakButton, { title: 'Action', onClick: click }),
+          h(TweakBlade, {
+            create(rack, index) {
+              folder = rack
+              const blade = rack.addBlade({ view: 'separator', index })
+              const dispose = blade.dispose.bind(blade)
+              blade.dispose = () => {
+                release()
+                dispose()
+              }
+              return blade
+            },
+          }),
+        ]),
+      ),
+  })
+
+  app.mount(host)
+  try {
+    const [button] = nativeButtons(host)
+    if (!folder || !button) {
+      throw new Error('Expected a native folder and button')
+    }
+    folder.dispose()
+    button.click()
+
+    expect(release).toHaveBeenCalledOnce()
+    expect(click).not.toHaveBeenCalled()
+    expect(nativeButtons(host)).toHaveLength(0)
+  } finally {
+    app.unmount()
+  }
+  expect(release).toHaveBeenCalledOnce()
+})
+
+it('keeps other panes working after an unhandled initial blade factory error', async () => {
+  const host = document.createElement('div')
+  const showButton = shallowRef(false)
+  const error = new Error('Initial blade factory failed')
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  const report = vi.spyOn(console, 'error').mockImplementation(() => {})
+  const app = createApp({
+    setup: () => () =>
+      h(Fragment, null, [
+        h(TweakPane, null, () =>
+          h(TweakBlade, {
+            create() {
+              throw error
+            },
+          }),
+        ),
+        h(TweakPane, null, () =>
+          showButton.value ? h(TweakButton, { title: 'Ready' }) : null,
+        ),
+      ]),
+  })
+
+  try {
+    app.mount(host)
+    showButton.value = true
+    await nextTick()
+
+    expect(report).toHaveBeenCalledExactlyOnceWith(error)
+    expect(nativeButtons(host).map(button => button.textContent)).toEqual([
+      'Ready',
+    ])
+  } finally {
+    warn.mockRestore()
+    report.mockRestore()
+    app.unmount()
+  }
+})
+
+it.each(['pane', 'folder'])(
+  'immediately disposes a blade returned after its %s is disposed',
+  async container => {
+    const host = document.createElement('div')
+    const showBlade = shallowRef(false)
+    const onError = vi.fn<(error: unknown) => void>()
+    const disposeBlade = vi.fn<() => void>()
+    const createLater = vi.fn<
+      (rack: Pane | FolderApi, index: number) => BladeApi
+    >((rack, index) => rack.addBlade({ view: 'separator', index }))
+    const create = vi.fn<(rack: Pane | FolderApi) => BladeApi>(rack => {
+      rack.dispose()
+      const blade = rack.addBlade({ view: 'separator' })
+      const dispose = blade.dispose.bind(blade)
+      blade.dispose = () => {
+        disposeBlade()
+        dispose()
+      }
+      return blade
+    })
+
+    function controls() {
+      return showBlade.value
+        ? [h(TweakBlade, { create }), h(TweakBlade, { create: createLater })]
+        : []
+    }
+
+    const app = createApp({
+      setup: () => () =>
+        h(TweakPane, null, () =>
+          container === 'folder'
+            ? h(TweakFolder, { title: 'Options' }, controls)
+            : controls(),
+        ),
+    })
+    app.config.errorHandler = onError
+
+    app.mount(host)
+    try {
+      showBlade.value = true
+      await nextTick()
+
+      expect(create).toHaveBeenCalledOnce()
+      expect(create.mock.calls[0]?.[0].children).toHaveLength(0)
+      expect(disposeBlade).toHaveBeenCalledOnce()
+      expect(createLater).not.toHaveBeenCalled()
+      expect(onError).not.toHaveBeenCalled()
+    } finally {
+      app.unmount()
+    }
+    expect(disposeBlade).toHaveBeenCalledOnce()
+  },
+)
+
+it('inserts parent controls in order after a blade disposes its folder', async () => {
+  const host = document.createElement('div')
+  const showBlade = shallowRef(false)
+  const showNewButton = shallowRef(false)
+
+  const app = createApp({
+    setup: () => () =>
+      h(TweakPane, null, () => [
+        h(TweakFolder, { key: 'folder', title: 'Options' }, () =>
+          showBlade.value
+            ? h(TweakBlade, {
+                create(rack) {
+                  rack.dispose()
+                  return rack.addBlade({ view: 'separator' })
+                },
+              })
+            : [],
+        ),
+        showNewButton.value
+          ? h(TweakButton, { key: 'new', title: 'New' })
+          : null,
+        h(TweakButton, { key: 'tail', title: 'Tail' }),
+      ]),
+  })
+
+  app.mount(host)
+  try {
+    const [tail] = nativeButtons(host)
+    showBlade.value = true
+    await nextTick()
+    expect(host.querySelector('button.tp-fldv_b')).toBeNull()
+
+    showNewButton.value = true
+    await nextTick()
+    expect(nativeButtons(host).map(button => button.textContent)).toEqual([
+      'New',
+      'Tail',
+    ])
+    expect(nativeButtons(host)[1]).toBe(tail)
+    expect(host.querySelector('button.tp-fldv_b')).toBeNull()
+  } finally {
+    app.unmount()
+  }
+})
+
+it('uses the current native index after an earlier folder is disposed in the same update', async () => {
+  const host = document.createElement('div')
+  const insertControls = shallowRef(false)
+  let folder: FolderApi | undefined
+
+  const app = createApp({
+    setup: () => () =>
+      h(TweakPane, null, () => [
+        h(TweakFolder, { key: 'folder', title: 'Options' }, () =>
+          h(TweakBlade, {
+            create(rack, index) {
+              folder = rack
+              return rack.addBlade({ view: 'separator', index })
+            },
+          }),
+        ),
+        ...(insertControls.value
+          ? [
+              h(TweakBlade, {
+                key: 'trigger',
+                create(rack, index) {
+                  if (!folder) {
+                    throw new Error('Expected a Tweakpane folder')
+                  }
+                  const button = rack.addButton({ title: 'Trigger', index })
+                  folder.dispose()
+                  return button
+                },
+              }),
+              h(TweakButton, { key: 'new', title: 'New' }),
+            ]
+          : []),
+        h(TweakButton, { key: 'tail', title: 'Tail' }),
+      ]),
+  })
+
+  app.mount(host)
+  try {
+    const [tail] = nativeButtons(host)
+    insertControls.value = true
+    await nextTick()
+
+    expect(host.querySelector('button.tp-fldv_b')).toBeNull()
+    expect(nativeButtons(host).map(button => button.textContent)).toEqual([
+      'Trigger',
+      'New',
+      'Tail',
+    ])
+    expect(nativeButtons(host)[2]).toBe(tail)
+  } finally {
+    app.unmount()
+  }
+})
+
+it('skips a disposed native folder returned by a blade factory when inserting controls', async () => {
+  const host = document.createElement('div')
+  const showNewButton = shallowRef(false)
+  let folder: FolderApi | undefined
+
+  const app = createApp({
+    setup: () => () =>
+      h(TweakPane, null, () => [
+        h(TweakBlade, {
+          key: 'folder',
+          create(rack, index) {
+            folder = rack.addFolder({ title: 'Options', index })
+            return folder
+          },
+        }),
+        showNewButton.value
+          ? h(TweakButton, { key: 'new', title: 'New' })
+          : null,
+        h(TweakButton, { key: 'tail', title: 'Tail' }),
+      ]),
+  })
+
+  app.mount(host)
+  try {
+    const [tail] = nativeButtons(host)
+    if (!folder) {
+      throw new Error('Expected a Tweakpane folder')
+    }
+    folder.dispose()
+    showNewButton.value = true
+    await nextTick()
+
+    expect(host.querySelector('button.tp-fldv_b')).toBeNull()
+    expect(nativeButtons(host).map(button => button.textContent)).toEqual([
+      'New',
+      'Tail',
+    ])
+    expect(nativeButtons(host)[1]).toBe(tail)
+  } finally {
+    app.unmount()
+  }
+})
+
+it('inserts controls in template order after a shallow-reactive blade', async () => {
+  const host = document.createElement('div')
+  const showMiddle = shallowRef(false)
+  const app = createApp({
+    setup: () => () =>
+      h(TweakPane, null, () => [
+        h(TweakBlade, {
+          key: 'first',
+          create: (rack, index) =>
+            shallowReactive(rack.addButton({ title: 'First', index })),
+        }),
+        showMiddle.value
+          ? h(TweakButton, { key: 'middle', title: 'Middle' })
+          : null,
+        h(TweakButton, { key: 'last', title: 'Last' }),
+      ]),
+  })
+
+  app.mount(host)
+  try {
+    const [first, last] = nativeButtons(host)
+    expect(first?.textContent).toBe('First')
+    expect(last?.textContent).toBe('Last')
+
+    showMiddle.value = true
+    await nextTick()
+
+    const [retainedFirst, middle, retainedLast] = nativeButtons(host)
+    expect(retainedFirst).toBe(first)
+    expect(middle?.textContent).toBe('Middle')
+    expect(retainedLast).toBe(last)
+  } finally {
+    app.unmount()
+  }
+})
+
+it('inserts controls in template order after a plugin returns a shallow-reactive blade', () => {
+  const host = document.createElement('div')
+  const view = 'reactive-test-blade'
+  class ReactiveBladeController extends BladeController {}
+
+  const plugin = createPlugin<BladePlugin<BaseBladeParams>>({
+    id: view,
+    type: 'blade',
+    accept: params => (params['view'] === view ? { params: { view } } : null),
+    controller({ blade, document, viewProps }) {
+      const element = document.createElement('button')
+      element.classList.add('tp-btnv_b')
+      element.textContent = 'First'
+      return new ReactiveBladeController({
+        blade,
+        view: { element },
+        viewProps,
+      })
+    },
+    api: ({ controller }) =>
+      controller instanceof ReactiveBladeController
+        ? shallowReactive(new BladeApi(controller))
+        : null,
+  })
+
+  const app = createApp({
+    setup: () => () =>
+      h(TweakPane, { plugins: [{ id: view, plugin }] }, () => [
+        h(TweakBlade, {
+          create: (rack, index) => rack.addBlade({ view, index }),
+        }),
+        h(TweakButton, { title: 'Last' }),
+      ]),
+  })
+
+  app.mount(host)
+  try {
+    expect(nativeButtons(host).map(button => button.textContent)).toEqual([
+      'First',
+      'Last',
+    ])
   } finally {
     app.unmount()
   }

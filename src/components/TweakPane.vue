@@ -11,13 +11,16 @@ const props = withDefaults(
     expanded?: boolean
     plugins?: readonly TpPluginBundle[]
   }>(),
-  { expanded: true },
+  {
+    expanded: true,
+  },
 )
 
 defineSlots<{
   default?: () => VNode[]
 }>()
 
+// Vue 3.5.0 writes to matching setup bindings when a template ref is assigned.
 const hostRef = useTemplateRef<HTMLElement>('host')
 const anchorRef = useTemplateRef<HTMLElement>('anchor')
 

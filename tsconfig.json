@@ -8,5 +8,11 @@
     "esModuleInterop": true,
     "skipLibCheck": true
   },
-  "include": ["*.ts", "./src/**/*.ts", "./scripts/**/*.ts", "./tests/**/*.ts"]
+  "include": [
+    "*.ts",
+    "./src/**/*.ts",
+    "./scripts/**/*.ts",
+    "./tests/**/*.ts",
+    "./tests/**/*.vue"
+  ]
 }

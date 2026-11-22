@@ -1,9 +1,11 @@
 import { isUndefined } from '@ntnyq/utils'
 import { Pane } from 'tweakpane'
 import {
+  ErrorCodes,
   getCurrentInstance,
   getCurrentScope,
   onMounted,
+  onScopeDispose,
   shallowReadonly,
   shallowRef,
   toValue,
@@ -12,6 +14,11 @@ import {
 import type { MaybeRefOrGetter, ShallowRef } from 'vue'
 import type { Disposable, TweakpaneOptions } from '../types'
 import { managePaneBindings } from '../utils'
+import {
+  reportVueError,
+  rethrowAfterCleanup,
+  throwCollectedErrors,
+} from '../utils/vue-error'
 
 /**
  * Creates a native Tweakpane pane in the current host element.
@@ -24,6 +31,8 @@ import { managePaneBindings } from '../utils'
  * prevents pane creation.
  * @param options Optional title, initial expanded state, and configuration
  * callback. Cleanup returned by `configure` runs as part of pane disposal.
+ * During host changes and scope teardown, Vue reports cleanup errors after
+ * attempting the remaining lifecycle work.
  * @returns A shallow, read-only ref containing the current pane, or `null`
  * when no pane is available.
  *
@@ -38,71 +47,118 @@ export function useTweakpane(
   options?: TweakpaneOptions,
 ): Readonly<ShallowRef<Pane | null>> {
   const pane = shallowRef<Pane | null>(null)
+  const component = getCurrentInstance()
+  const scope = getCurrentScope()
+  let disposeCurrent: Disposable | undefined
+
+  function clearPane() {
+    pane.value = null
+  }
+
+  if (scope) {
+    onScopeDispose(() => {
+      try {
+        disposeCurrent?.()
+      } catch (error) {
+        reportVueError(error, component, ErrorCodes.APP_UNMOUNT_CLEANUP)
+      }
+    })
+  }
+
+  function mountPane(container: HTMLElement) {
+    const { configure, ...config } = options ?? {}
+    const instance = new Pane({
+      ...config,
+      container,
+      document: container.ownerDocument,
+    })
+    const disposePane = instance.dispose.bind(instance)
+    const disposeBindings = managePaneBindings(instance.element)
+    let cleanup: void | Disposable
+    let disposed = false
+
+    function dispose() {
+      if (disposed) {
+        return
+      }
+
+      disposed = true
+      disposeCurrent = undefined
+      const errors: unknown[] = []
+      for (const release of [
+        disposeBindings,
+        clearPane,
+        cleanup,
+        disposePane,
+      ]) {
+        try {
+          release?.()
+        } catch (error) {
+          errors.push(error)
+        }
+      }
+      throwCollectedErrors(errors, 'Failed to dispose Tweakpane')
+    }
+
+    instance.dispose = dispose
+    disposeCurrent = dispose
+
+    try {
+      const configureCleanup = configure?.(instance)
+      if (disposed) {
+        configureCleanup?.()
+        return
+      }
+      cleanup = configureCleanup
+    } catch (error) {
+      rethrowAfterCleanup(
+        error,
+        dispose,
+        'Failed to configure and dispose Tweakpane',
+      )
+    }
+    pane.value = instance
+  }
 
   function watchHost() {
-    watch(
+    let initialErrors: unknown[] | undefined = component ? undefined : []
+    const stop = watch(
       () => toValue(host),
-      (container, _previous, onCleanup) => {
-        if (!container) {
-          return
+      container => {
+        const errors = initialErrors ?? []
+        try {
+          disposeCurrent?.()
+        } catch (error) {
+          errors.push(error)
         }
-
-        const { configure, ...config } = options ?? {}
-        const instance = new Pane({
-          ...config,
-          container,
-          document: container.ownerDocument,
-        })
-        const disposePane = instance.dispose.bind(instance)
-        const disposeBindings = managePaneBindings(instance.element)
-        let cleanup: void | Disposable
-        let disposed = false
-
-        function dispose() {
-          if (disposed) {
-            return
-          }
-
-          disposed = true
-          try {
-            try {
-              disposeBindings()
-            } finally {
-              pane.value = null
-            }
-          } finally {
-            try {
-              cleanup?.()
-            } finally {
-              disposePane()
-            }
-          }
-        }
-
-        instance.dispose = dispose
-        onCleanup(dispose)
 
         try {
-          const configureCleanup = configure?.(instance)
-          if (disposed) {
-            configureCleanup?.()
-            return
+          if (container && (!scope || scope.active)) {
+            mountPane(container)
           }
-          cleanup = configureCleanup
         } catch (error) {
-          dispose()
-          throw error
+          errors.push(error)
         }
 
-        pane.value = instance
+        if (!initialErrors) {
+          try {
+            throwCollectedErrors(errors, 'Failed to replace Tweakpane')
+          } catch (error) {
+            reportVueError(error, component, ErrorCodes.COMPONENT_UPDATE)
+          }
+        }
       },
       { flush: 'post', immediate: true },
     )
+    const errors = initialErrors
+    initialErrors = undefined
+    if (errors?.length) {
+      stop()
+      throwCollectedErrors(errors, 'Failed to create Tweakpane')
+    }
   }
 
-  if (getCurrentInstance()) {
-    const scope = getCurrentScope()
-
+  if (component) {
     onMounted(() => {
       if (scope?.active) {
         scope.run(watchHost)
