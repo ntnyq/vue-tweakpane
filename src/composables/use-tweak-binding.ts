@@ -15,7 +15,7 @@ import {
 } from 'vue'
 import type { MaybeRefOrGetter, Ref, ShallowRef } from 'vue'
 import type { Disposable, TweakBindingApi, TweakValue } from '../types'
-import { createBindingValue, registerPaneBinding } from '../utils'
+import { createBindingValueAdapter, registerPaneBinding } from '../utils'
 import { reportVueError, rethrowAfterCleanup } from '../utils/vue-error'
 
 /**
@@ -60,23 +60,24 @@ export function useTweakBinding<T extends TweakValue>(
     rack: Pick<Pane, 'addBinding'>,
     onCleanup: (dispose: Disposable) => void,
   ) {
-    const rackDisposed =
+    const rackDisposedState =
       rack instanceof BladeApi
         ? rack.controller.viewProps.value('disposed')
         : undefined
-    if (rackDisposed?.rawValue) {
+    if (rackDisposedState?.rawValue) {
       return
     }
 
-    let active = true
+    // Cleanup can invalidate this mount before addBinding returns.
+    let isBindingMountActive = true
     let cleanup: Disposable | undefined
 
     function dispose() {
-      if (!active) {
+      if (!isBindingMountActive) {
         return
       }
 
-      active = false
+      isBindingMountActive = false
       const disposeResources = cleanup
       cleanup = undefined
       disposeResources?.()
@@ -90,48 +91,55 @@ export function useTweakBinding<T extends TweakValue>(
       }
     })
 
-    const { target, snapshot, copyToModel, hasSameValue } = createBindingValue(
-      model.value,
-    )
-    if (!active || rackDisposed?.rawValue) {
+    const {
+      target,
+      createModelSnapshot,
+      createUpdatedModelValue,
+      areControlValuesEqual,
+    } = createBindingValueAdapter(model.value)
+    if (!isBindingMountActive || rackDisposedState?.rawValue) {
       return
     }
 
     const instance = rack.addBinding(target, 'value', params)
-    const disposed = instance.controller.viewProps.value('disposed')
-    if (!active || disposed.rawValue || rackDisposed?.rawValue) {
-      if (!disposed.rawValue) {
+    const bindingDisposedState = instance.controller.viewProps.value('disposed')
+    if (
+      !isBindingMountActive ||
+      bindingDisposedState.rawValue ||
+      rackDisposedState?.rawValue
+    ) {
+      if (!bindingDisposedState.rawValue) {
         instance.dispose()
       }
       return
     }
 
-    const disposeBinding = instance.dispose.bind(instance)
+    const disposeNativeBinding = instance.dispose.bind(instance)
     const modelScope = scope?.run(effectScope) ?? effectScope(true)
     const unregister = registerPaneBinding(instance.element, dispose)
 
     cleanup = () => {
-      disposed.emitter.off('change', onNativeDispose)
+      bindingDisposedState.emitter.off('change', onNativeDispose)
       unregister()
       modelScope.stop()
       instance.off('change', onChange)
       try {
         // A native rack is already iterating its children during disposal.
         if (
-          !disposed.rawValue &&
+          !bindingDisposedState.rawValue &&
           !instance.controller.parent?.viewProps.get('disposed')
         ) {
-          disposeBinding()
+          disposeNativeBinding()
         }
       } finally {
         binding.value = null
       }
     }
     instance.dispose = dispose
-    disposed.emitter.on('change', onNativeDispose)
+    bindingDisposedState.emitter.on('change', onNativeDispose)
 
     function onNativeDispose() {
-      if (!disposed.rawValue) {
+      if (!bindingDisposedState.rawValue) {
         return
       }
 
@@ -142,45 +150,49 @@ export function useTweakBinding<T extends TweakValue>(
       }
     }
 
-    let refreshing = false
+    // Ignore native change events emitted synchronously by a model-driven refresh.
+    let isRefreshingBindingFromModel = false
 
     function syncFromModel(value: T) {
-      if (!active) {
+      if (!isBindingMountActive) {
         return
       }
 
-      const changed = !hasSameValue(target.value, value)
+      const changed = !areControlValuesEqual(target.value, value)
       target.value = value
       if (!changed) {
         return
       }
 
-      refreshing = true
+      isRefreshingBindingFromModel = true
       try {
         instance.refresh()
       } finally {
-        refreshing = false
+        isRefreshingBindingFromModel = false
       }
     }
 
     function onChange({ value }: { value: T }) {
-      if (!active || refreshing) {
+      if (!isBindingMountActive || isRefreshingBindingFromModel) {
         return
       }
 
       const current = model.value
-      if (hasSameValue(value, current)) {
+      if (areControlValuesEqual(value, current)) {
         return
       }
 
       try {
-        model.value = copyToModel(value, current)
+        model.value = createUpdatedModelValue(value, current)
       } finally {
         // Wait for the native change to finish before correcting a writable computed.
-        if (active && !hasSameValue(target.value, model.value)) {
+        if (
+          isBindingMountActive &&
+          !areControlValuesEqual(target.value, model.value)
+        ) {
           void nextTick(() => {
-            if (active) {
-              syncFromModel(snapshot(model.value))
+            if (isBindingMountActive) {
+              syncFromModel(createModelSnapshot(model.value))
             }
           })
         }
@@ -191,7 +203,7 @@ export function useTweakBinding<T extends TweakValue>(
 
     try {
       modelScope.run(() =>
-        watch(() => snapshot(model.value), syncFromModel, {
+        watch(() => createModelSnapshot(model.value), syncFromModel, {
           immediate: true,
         }),
       )
@@ -203,7 +215,7 @@ export function useTweakBinding<T extends TweakValue>(
       )
     }
 
-    if (active) {
+    if (isBindingMountActive) {
       binding.value = instance
     }
   }

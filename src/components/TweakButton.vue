@@ -18,10 +18,11 @@ const anchorRef = useTemplateRef<HTMLElement>('anchor')
 useRackEntry(anchorRef, (rack, index) => {
   const button = rack.addButton({ title: props.title, index })
   const { emitter } = button.controller.buttonController
-  const disposed = button.controller.viewProps.value('disposed')
+  // Suppress Vue click events after the native button is disposed.
+  const buttonDisposedState = button.controller.viewProps.value('disposed')
 
   function onClick() {
-    if (!disposed.rawValue) {
+    if (!buttonDisposedState.rawValue) {
       emit('click')
     }
   }

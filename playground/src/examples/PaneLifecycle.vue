@@ -9,18 +9,23 @@ import ExampleStage from '../components/ExampleStage.vue'
 import ToolbarButton from '../components/ToolbarButton.vue'
 
 const hostRef = useTemplateRef('hostRef')
-const hostKey = shallowRef(0)
+
 const [shouldShowHost, setShouldShowHost] = useToggle(true)
 const [shouldBindPosition] = useToggle(true)
+
+const hostKey = shallowRef(0)
+
 const position = ref({ x: 0, y: 0 })
+
 const motion = shallowRef<FolderApi>()
-const created = shallowRef(0)
-const disposed = shallowRef(0)
+
+const paneCreationCount = shallowRef(0)
+const paneDisposalCount = shallowRef(0)
 
 const pane = useTweakpane(hostRef, {
   title: 'Lifecycle',
   configure(instance) {
-    created.value++
+    paneCreationCount.value++
     instance.registerPlugin(Essentials)
     const graph = instance.addBlade({ view: 'fpsgraph', label: 'FPS' })
 
@@ -41,7 +46,7 @@ const pane = useTweakpane(hostRef, {
     return () => {
       cancelAnimationFrame(frame)
       motion.value = undefined
-      disposed.value++
+      paneDisposalCount.value++
     }
   },
 })
@@ -56,24 +61,25 @@ const point = useTweakBinding(
   },
 )
 
+// Highlight each step while its host, pane, or binding is available.
 const steps = computed(() => [
   {
     label: 'Host',
     icon: 'i-lucide:square-dashed',
     status: hostRef.value ? 'Mounted' : 'Absent',
-    active: Boolean(hostRef.value),
+    isHighlighted: Boolean(hostRef.value),
   },
   {
     label: 'Pane',
     icon: 'i-lucide:sliders-horizontal',
     status: pane.value ? 'Active' : 'Disposed',
-    active: Boolean(pane.value),
+    isHighlighted: Boolean(pane.value),
   },
   {
     label: 'Position binding',
     icon: 'i-lucide:link-2',
     status: point.value ? 'Connected' : 'Detached',
-    active: Boolean(point.value),
+    isHighlighted: Boolean(point.value),
   },
 ])
 
@@ -100,11 +106,11 @@ function movePoint() {
           v-for="step in steps"
           :key="step.label"
           class="relative min-h-[96px] grid content-center gap-[12px] rounded-panel border bg-panel p-[12px] text-muted [&:not(:last-child)]:after:(absolute top-1/2 end-[-17px] w-[16px] border-t border-chart-axis border-dashed content-empty) max-[480px]:(p-[7px] [&:not(:last-child)]:after:(end-[-8px] w-[7px]))"
-          :class="step.active ? 'border-accent' : 'border-stroke'"
+          :class="step.isHighlighted ? 'border-accent' : 'border-stroke'"
         >
           <span
             class="text-[17px]"
-            :class="[step.icon, { 'text-accent': step.active }]"
+            :class="[step.icon, { 'text-accent': step.isHighlighted }]"
             aria-hidden="true"
           ></span>
           <div>
@@ -119,11 +125,11 @@ function movePoint() {
     <template #stats>
       <div>
         <dt>Created</dt>
-        <dd>{{ created }}</dd>
+        <dd>{{ paneCreationCount }}</dd>
       </div>
       <div>
         <dt>Disposed</dt>
-        <dd>{{ disposed }}</dd>
+        <dd>{{ paneDisposalCount }}</dd>
       </div>
       <div>
         <dt>Position</dt>
@@ -138,8 +144,9 @@ function movePoint() {
       <ToolbarButton
         :disabled="!pane"
         @click="pane?.dispose()"
-        >Dispose pane</ToolbarButton
       >
+        Dispose pane
+      </ToolbarButton>
     </template>
     <template #controls>
       <div

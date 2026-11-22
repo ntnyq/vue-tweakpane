@@ -49,7 +49,7 @@ export function useTweakpane(
   const pane = shallowRef<Pane | null>(null)
   const component = getCurrentInstance()
   const scope = getCurrentScope()
-  let disposeCurrent: Disposable | undefined
+  let disposeCurrentPane: Disposable | undefined
 
   function clearPane() {
     pane.value = null
@@ -58,7 +58,7 @@ export function useTweakpane(
   if (scope) {
     onScopeDispose(() => {
       try {
-        disposeCurrent?.()
+        disposeCurrentPane?.()
       } catch (error) {
         reportVueError(error, component, ErrorCodes.APP_UNMOUNT_CLEANUP)
       }
@@ -72,24 +72,25 @@ export function useTweakpane(
       container,
       document: container.ownerDocument,
     })
-    const disposePane = instance.dispose.bind(instance)
+    const disposeNativePane = instance.dispose.bind(instance)
     const disposeBindings = managePaneBindings(instance.element)
     let cleanup: void | Disposable
-    let disposed = false
+    // Set before cleanup so reentrant disposal returns immediately.
+    let isPaneDisposed = false
 
     function dispose() {
-      if (disposed) {
+      if (isPaneDisposed) {
         return
       }
 
-      disposed = true
-      disposeCurrent = undefined
+      isPaneDisposed = true
+      disposeCurrentPane = undefined
       const errors: unknown[] = []
       for (const release of [
         disposeBindings,
         clearPane,
         cleanup,
-        disposePane,
+        disposeNativePane,
       ]) {
         try {
           release?.()
@@ -101,11 +102,11 @@ export function useTweakpane(
     }
 
     instance.dispose = dispose
-    disposeCurrent = dispose
+    disposeCurrentPane = dispose
 
     try {
       const configureCleanup = configure?.(instance)
-      if (disposed) {
+      if (isPaneDisposed) {
         configureCleanup?.()
         return
       }
@@ -127,7 +128,7 @@ export function useTweakpane(
       container => {
         const errors = initialErrors ?? []
         try {
-          disposeCurrent?.()
+          disposeCurrentPane?.()
         } catch (error) {
           errors.push(error)
         }

@@ -26,7 +26,7 @@ function isObjectValue(value: TweakValue): value is ObjectValue {
  * @param value The object bound to the control.
  * @returns The recognized fields for the value's control.
  */
-function getValueKeys(value: ObjectValue) {
+function getControlValueKeys(value: ObjectValue) {
   return isNumber(Reflect.get(value, 'r')) &&
     isNumber(Reflect.get(value, 'g')) &&
     isNumber(Reflect.get(value, 'b'))
@@ -69,13 +69,15 @@ function getRecordPrototype(value: ObjectValue): object | null {
  * @param initialValue The model value used to select the control.
  * @returns A native binding target and operations for synchronizing its value.
  */
-export function createBindingValue<T extends TweakValue>(initialValue: T) {
+export function createBindingValueAdapter<T extends TweakValue>(
+  initialValue: T,
+) {
   const target = { value: initialValue }
-  let keys: readonly string[] = []
+  let controlValueKeys: readonly string[] = []
 
   if (isObjectValue(initialValue)) {
     const prototype = getRecordPrototype(toRaw(initialValue))
-    keys = getValueKeys(initialValue)
+    controlValueKeys = getControlValueKeys(initialValue)
     target.value = snapshotRecord(initialValue, prototype)
   }
 
@@ -84,7 +86,7 @@ export function createBindingValue<T extends TweakValue>(initialValue: T) {
     prototype: object | null,
     descriptors: PropertyDescriptorMap,
   ): T {
-    for (const key of keys) {
+    for (const key of controlValueKeys) {
       if (isKeyOf(value, key)) {
         descriptors[key] = {
           configurable: true,
@@ -110,7 +112,7 @@ export function createBindingValue<T extends TweakValue>(initialValue: T) {
       if (
         descriptor?.enumerable &&
         hasOwn(descriptor, 'value') &&
-        !(typeof key === 'string' && keys.includes(key))
+        !(typeof key === 'string' && controlValueKeys.includes(key))
       ) {
         descriptor.value = Reflect.get(value, key)
       }
@@ -118,13 +120,13 @@ export function createBindingValue<T extends TweakValue>(initialValue: T) {
     return copyRecord(value, prototype, descriptors)
   }
 
-  function snapshot(value: T): T {
+  function createModelSnapshot(value: T): T {
     return isObjectValue(value)
       ? snapshotRecord(value, getRecordPrototype(toRaw(value)))
       : value
   }
 
-  function copyToModel(value: T, model: T): T {
+  function createUpdatedModelValue(value: T, model: T): T {
     if (!isObjectValue(value) || !isObjectValue(model)) {
       return value
     }
@@ -136,20 +138,20 @@ export function createBindingValue<T extends TweakValue>(initialValue: T) {
     )
   }
 
-  function hasSameValue(first: T, second: T): boolean {
+  function areControlValuesEqual(first: T, second: T): boolean {
     if (!isObjectValue(first) || !isObjectValue(second)) {
       return Object.is(first, second)
     }
 
-    return keys.every(key =>
+    return controlValueKeys.every(key =>
       Object.is(Reflect.get(first, key), Reflect.get(second, key)),
     )
   }
 
   return {
     target,
-    snapshot,
-    copyToModel,
-    hasSameValue,
+    createModelSnapshot,
+    createUpdatedModelValue,
+    areControlValuesEqual,
   }
 }
