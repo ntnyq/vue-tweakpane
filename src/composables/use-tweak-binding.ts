@@ -90,7 +90,9 @@ export function useTweakBinding<T extends TweakValue>(
       }
     })
 
-    const { target, copyValue, hasSameValue } = createBindingValue(model.value)
+    const { target, snapshot, copyToModel, hasSameValue } = createBindingValue(
+      model.value,
+    )
     if (!active || rackDisposed?.rawValue) {
       return
     }
@@ -172,13 +174,13 @@ export function useTweakBinding<T extends TweakValue>(
       }
 
       try {
-        model.value = copyValue(value, current)
+        model.value = copyToModel(value, current)
       } finally {
         // Wait for the native change to finish before correcting a writable computed.
         if (active && !hasSameValue(target.value, model.value)) {
           void nextTick(() => {
             if (active) {
-              syncFromModel(copyValue(model.value))
+              syncFromModel(snapshot(model.value))
             }
           })
         }
@@ -189,7 +191,7 @@ export function useTweakBinding<T extends TweakValue>(
 
     try {
       modelScope.run(() =>
-        watch(() => copyValue(model.value), syncFromModel, {
+        watch(() => snapshot(model.value), syncFromModel, {
           immediate: true,
         }),
       )

@@ -796,6 +796,66 @@ it('synchronizes RGB channels for a color with coordinate metadata', async () =>
 
 it.each([
   {
+    name: 'point',
+    initial: { x: 1, y: 2 },
+    field: 'x',
+    input: '4',
+    expected: { x: 4, y: 2 },
+  },
+  {
+    name: 'color',
+    initial: { r: 17, g: 34, b: 51 },
+    field: 'r',
+    input: '#776655',
+    expected: { r: 119, g: 102, b: 85 },
+  },
+])(
+  'preserves $name metadata descriptors without invoking accessors on model writes',
+  ({ initial, field, input, expected }) => {
+    const scope = effectScope()
+    const host = document.createElement('div')
+    const pane = new Pane({ container: host })
+    const metadata = Symbol('metadata')
+    const getMetadata = vi.fn<() => string>(() => 'hidden')
+    const getLabel = vi.fn<() => string>(() => 'visible')
+    const original = Object.defineProperties(
+      { ...initial },
+      {
+        [field]: { writable: false },
+        id: { value: 'control' },
+        label: { enumerable: true, get: getLabel },
+        [metadata]: { configurable: true, get: getMetadata },
+      },
+    )
+    const model = shallowRef(original)
+
+    try {
+      scope.run(() => useTweakBinding(pane, model))
+      editInput(getInput(host), input)
+
+      expect(getMetadata).not.toHaveBeenCalled()
+      expect(getLabel).not.toHaveBeenCalled()
+      expect(model.value).toMatchObject(expected)
+      expect(model.value).not.toBe(original)
+      expect(original).toMatchObject(initial)
+      expect(
+        Object.getOwnPropertyDescriptor(model.value, field)?.writable,
+      ).toBe(true)
+      for (const key of ['id', 'label', metadata]) {
+        expect(Object.getOwnPropertyDescriptor(model.value, key)).toEqual(
+          Object.getOwnPropertyDescriptor(original, key),
+        )
+      }
+      expect(Reflect.get(model.value, metadata)).toBe('hidden')
+    } finally {
+      scope.stop()
+      pane.dispose()
+    }
+  },
+)
+
+it.each([
+  {
     name: 'a cross-realm point',
     createPoint: (): TweakPoint => runInNewContext('({ x: 1, y: 2 })'),
     prototype: Object.prototype,

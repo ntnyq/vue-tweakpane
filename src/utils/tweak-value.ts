@@ -5,7 +5,6 @@ import {
   isNull,
   isNumber,
   isObject,
-  isUndefined,
 } from '@ntnyq/utils'
 import { toRaw } from 'vue'
 import { COLOR_KEYS, POINT_KEYS } from '../constants'
@@ -77,34 +76,64 @@ export function createBindingValue<T extends TweakValue>(initialValue: T) {
   if (isObjectValue(initialValue)) {
     const prototype = getRecordPrototype(toRaw(initialValue))
     keys = getValueKeys(initialValue)
-    target.value = copyRecord(initialValue, initialValue, prototype)
+    target.value = snapshotRecord(initialValue, prototype)
   }
 
-  function copyRecord<TRecord extends ObjectValue>(
+  function copyRecord(
     value: ObjectValue,
-    base: TRecord,
     prototype: object | null,
-  ): TRecord {
-    const copy = { ...base }
-    if (isNull(prototype)) {
-      Reflect.setPrototypeOf(copy, null)
-    }
+    descriptors: PropertyDescriptorMap,
+  ): T {
     for (const key of keys) {
       if (isKeyOf(value, key)) {
-        Reflect.set(copy, key, Reflect.get(value, key))
+        descriptors[key] = {
+          configurable: true,
+          enumerable: true,
+          value: Reflect.get(value, key),
+          writable: true,
+        }
       }
     }
-    return copy
+    return Object.create(
+      isNull(prototype) ? null : Object.prototype,
+      descriptors,
+    ) as T
   }
 
-  function copyValue(value: T, model?: T): T {
-    // Native snapshots track shallow Vue state. Model writes keep raw metadata.
-    const base = isUndefined(model) ? value : toRaw(model)
-    if (!isObjectValue(value) || !isObjectValue(base)) {
+  function snapshotRecord(value: ObjectValue, prototype: object | null): T {
+    const descriptors: PropertyDescriptorMap =
+      Object.getOwnPropertyDescriptors(value)
+    // Native change events include metadata. Track data properties without
+    // calling metadata getters as a side effect of synchronization.
+    for (const key of Reflect.ownKeys(descriptors)) {
+      const descriptor = descriptors[key]
+      if (
+        descriptor?.enumerable &&
+        hasOwn(descriptor, 'value') &&
+        !(typeof key === 'string' && keys.includes(key))
+      ) {
+        descriptor.value = Reflect.get(value, key)
+      }
+    }
+    return copyRecord(value, prototype, descriptors)
+  }
+
+  function snapshot(value: T): T {
+    return isObjectValue(value)
+      ? snapshotRecord(value, getRecordPrototype(toRaw(value)))
+      : value
+  }
+
+  function copyToModel(value: T, model: T): T {
+    if (!isObjectValue(value) || !isObjectValue(model)) {
       return value
     }
-
-    return copyRecord(value, base, getRecordPrototype(toRaw(base)))
+    const base = toRaw(model)
+    return copyRecord(
+      value,
+      getRecordPrototype(base),
+      Object.getOwnPropertyDescriptors(base),
+    )
   }
 
   function hasSameValue(first: T, second: T): boolean {
@@ -119,7 +148,8 @@ export function createBindingValue<T extends TweakValue>(initialValue: T) {
 
   return {
     target,
-    copyValue,
+    snapshot,
+    copyToModel,
     hasSameValue,
   }
 }

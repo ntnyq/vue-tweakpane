@@ -70,6 +70,7 @@ Call the composables inside component setup or an active Vue effect scope. Both 
 - `useTweakBinding(parent, model, params?)` accepts a native `Pane`, `FolderApi`, or `TabPageApi`. The parent can also be a ref or getter that returns `null` to remove the control. Disposing the binding or a native container that owns it clears the binding's ref and stops synchronization.
 - Use a writable ref, property ref, or writable computed as the model. Edits write back immediately, and Vue updates refresh the control. Use `ref()` for objects whose coordinates or color channels you edit in place.
 - Supported values include numbers, booleans, strings, and plain RGB(A) or 2D–4D point objects. To bind a class-backed value, expose a plain object from a writable computed and update the instance in its setter. The native `change` event on `qualityBinding.value` infers `value` as `'low' | 'high'`. Tweakpane creates the input from the initial value's kind and its native `BindingParams`. Keep values and list options compatible with that input and the model's type.
+- When a control writes back a point or color, the new model object preserves the property descriptors of its own metadata, including non-enumerable and symbol keys.
 
 ### Dispose a native folder
 
