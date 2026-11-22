@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
-import type { BladeApi, FolderApi, Pane } from 'tweakpane'
+import { Pane } from 'tweakpane'
+import type { BladeApi, FolderApi } from 'tweakpane'
 import { expect, it, vi } from 'vitest'
 import { createApp, Fragment, h, nextTick, shallowRef } from 'vue'
 import {
@@ -81,18 +82,19 @@ it('inserts a conditional binding and reorders keyed controls without losing the
 
     keys.value = ['C', 'A', 'B']
     await vi.waitFor(() => expect(bindingLabels(host)).toEqual(['C', 'A', 'B']))
-    expect(inputFor(host, 'C')).toBe(c)
-    expect(inputFor(host, 'A')).not.toBe(a)
+    expect(inputFor(host, 'C')).not.toBe(c)
+    expect(inputFor(host, 'A')).toBe(a)
+    expect(inputFor(host, 'B')).toBe(b)
     expect(Number(inputFor(host, 'B').value)).toBe(12)
-    editInput(b, '42')
-    expect(values.B.value).toBe(12)
+    editInput(c, '42')
+    expect(values.C.value).toBe(3)
 
-    editInput(c, '13')
+    editInput(inputFor(host, 'C'), '13')
     expect(values.C.value).toBe(13)
     host.querySelector<HTMLButtonElement>('button.tp-btnv_b')?.click()
     expect(reset).toHaveBeenCalledOnce()
     await nextTick()
-    expect(Number(c.value)).toBe(3)
+    expect(Number(inputFor(host, 'C').value)).toBe(3)
 
     showB.value = false
     await nextTick()
@@ -174,4 +176,131 @@ it('disposes nested bindings and blades before their folders on removal and pane
     'outer',
   ])
   expect(host.childElementCount).toBe(0)
+})
+
+it('preserves the fold state of a keyed folder rebuilt during reordering', async () => {
+  const host = document.createElement('div')
+  const folderFirst = shallowRef(false)
+  const addFolder = vi.spyOn(Pane.prototype, 'addFolder')
+  const addButton = vi.spyOn(Pane.prototype, 'addButton')
+  const app = createApp({
+    setup: () => () =>
+      h(TweakPane, null, () => {
+        const folder = h(TweakFolder, { key: 'options', title: 'Options' })
+        const buttons = [
+          h(TweakButton, { key: 'reset', title: 'Reset' }),
+          h(TweakButton, { key: 'apply', title: 'Apply' }),
+        ]
+        return folderFirst.value ? [folder, ...buttons] : [...buttons, folder]
+      }),
+  })
+
+  function controlLabels() {
+    return Array.from(
+      host.querySelectorAll('button.tp-btnv_b, button.tp-fldv_b'),
+      button => button.textContent,
+    )
+  }
+
+  app.mount(host)
+  try {
+    const original = addFolder.mock.results[0]!.value
+    original.element.querySelector('button')!.click()
+    expect(original.expanded).toBe(false)
+
+    folderFirst.value = true
+    await vi.waitFor(() =>
+      expect(controlLabels()).toEqual(['Options', 'Reset', 'Apply']),
+    )
+    expect(addFolder).toHaveBeenCalledTimes(2)
+    expect(addButton).toHaveBeenCalledTimes(2)
+    const rebuilt = addFolder.mock.results[1]!.value
+    expect(rebuilt.expanded).toBe(false)
+
+    rebuilt.element.querySelector('button')!.click()
+    expect(rebuilt.expanded).toBe(true)
+
+    folderFirst.value = false
+    await vi.waitFor(() =>
+      expect(controlLabels()).toEqual(['Reset', 'Apply', 'Options']),
+    )
+    expect(addFolder).toHaveBeenCalledTimes(3)
+    expect(addButton).toHaveBeenCalledTimes(2)
+    expect(addFolder.mock.results[2]!.value.expanded).toBe(true)
+  } finally {
+    app.unmount()
+    addButton.mockRestore()
+    addFolder.mockRestore()
+  }
+})
+
+it('retains the longest ordered sequence and retires listeners across mixed rack updates', async () => {
+  const host = document.createElement('div')
+  const keys = shallowRef(['A', 'B', 'C', 'D', 'E'])
+  const models = Object.fromEntries(
+    ['A', 'B', 'C', 'D', 'E', 'F'].map(key => [key, shallowRef(1)]),
+  )
+  const addBinding = vi.spyOn(Pane.prototype, 'addBinding')
+  const app = createApp({
+    setup: () => () =>
+      h(TweakPane, null, () =>
+        keys.value.map(key =>
+          h(TweakBinding<number>, {
+            key,
+            modelValue: models[key]!.value,
+            'onUpdate:modelValue': (value: number) =>
+              (models[key]!.value = value),
+            params: { label: key },
+          }),
+        ),
+      ),
+  })
+  app.mount(host)
+  try {
+    const original = new Map(keys.value.map(key => [key, inputFor(host, key)]))
+    const apis = addBinding.mock.results.map(result => result.value)
+    expect(addBinding).toHaveBeenCalledTimes(5)
+
+    keys.value = ['E', 'A', 'B', 'C', 'D']
+    await vi.waitFor(() => expect(bindingLabels(host)).toEqual(keys.value))
+    for (const key of ['A', 'B', 'C', 'D']) {
+      expect(inputFor(host, key)).toBe(original.get(key))
+    }
+    expect(addBinding).toHaveBeenCalledTimes(6)
+    for (const [index, key] of ['A', 'B', 'C', 'D'].entries()) {
+      expect(apis[index].element.contains(inputFor(host, key))).toBe(true)
+    }
+    expect(
+      addBinding.mock.calls.filter(call => call[2]?.label === 'E'),
+    ).toHaveLength(2)
+    expect(inputFor(host, 'E')).not.toBe(original.get('E'))
+    editInput(original.get('E')!, '99')
+    expect(models['E']!.value).toBe(1)
+    editInput(inputFor(host, 'E'), '7')
+    expect(models['E']!.value).toBe(7)
+
+    // A new array and model change without a reorder must not remount controls.
+    keys.value = [...keys.value]
+    models['A']!.value = 5
+    await nextTick()
+    expect(addBinding).toHaveBeenCalledTimes(6)
+    expect(inputFor(host, 'A')).toBe(original.get('A'))
+
+    // Remove B, insert F, and move E back to the end in the same update.
+    const retiredE = inputFor(host, 'E')
+    keys.value = ['A', 'F', 'C', 'D', 'E']
+    await vi.waitFor(() => expect(bindingLabels(host)).toEqual(keys.value))
+    for (const key of ['A', 'C', 'D']) {
+      expect(inputFor(host, key)).toBe(original.get(key))
+    }
+    expect(addBinding).toHaveBeenCalledTimes(8)
+    editInput(retiredE, '88')
+    editInput(original.get('B')!, '88')
+    expect(models['E']!.value).toBe(7)
+    expect(models['B']!.value).toBe(1)
+    expect(Number(inputFor(host, 'E').value)).toBe(7)
+  } finally {
+    app.unmount()
+    addBinding.mockRestore()
+  }
 })

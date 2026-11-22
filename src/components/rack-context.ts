@@ -77,16 +77,36 @@ export function provideRack(anchor: Readonly<Ref<HTMLElement | null>>) {
         mounted.map(({ entry }, index) => [entry, index]),
       )
       const retained = new Set<RackEntry>()
-      let previousIndex = -1
+      const tails: { entry: RackEntry; index: number }[] = []
+      const predecessors = new Map<RackEntry, RackEntry | undefined>()
 
-      // Keep controls already in relative order. Moving a native blade through
-      // remove()/add() can attach duplicate Tweakpane listeners.
+      // Retain a longest increasing subsequence of the old indices, minimizing
+      // rebuilds. Moving native blades through remove()/add() can duplicate
+      // Tweakpane listeners, so only entries outside this sequence are remounted.
       for (const entry of ordered) {
         const index = previousIndices.get(entry)
-        if (index !== undefined && index > previousIndex) {
-          retained.add(entry)
-          previousIndex = index
+        if (index === undefined) {
+          continue
         }
+
+        let low = 0
+        let high = tails.length
+        while (low < high) {
+          const middle = Math.floor((low + high) / 2)
+          if (tails[middle]!.index < index) {
+            low = middle + 1
+          } else {
+            high = middle
+          }
+        }
+        predecessors.set(entry, tails[low - 1]?.entry)
+        tails[low] = { entry, index }
+      }
+
+      let retainedEntry = tails.at(-1)?.entry
+      while (retainedEntry) {
+        retained.add(retainedEntry)
+        retainedEntry = predecessors.get(retainedEntry)
       }
 
       for (let index = mounted.length - 1; index >= 0; index--) {

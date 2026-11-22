@@ -15,7 +15,7 @@
     "vue-tweakpane": "workspace:*"
   },
   "devDependencies": {
-    "@iconify-json/lucide": "^1.2.157",
+    "@iconify-json/lucide": "^1.2.158",
     "@shikijs/core": "^4.6.0",
     "@shikijs/engine-javascript": "^4.6.0",
     "@shikijs/langs": "^4.6.0",

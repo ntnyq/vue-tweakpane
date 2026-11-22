@@ -19,13 +19,20 @@ defineSlots<{
 
 const anchorRef = useTemplateRef<HTMLElement>('anchor')
 const mountRack = provideRack(anchorRef)
+let savedExpanded: boolean | undefined
 
 useRackEntry(anchorRef, (rack, index) => {
-  const folder = rack.addFolder({ ...props, index })
+  const folder = rack.addFolder({
+    ...props,
+    expanded: savedExpanded ?? props.expanded,
+    index,
+  })
 
   try {
     const unmount = mountRack(folder)
     return () => {
+      // The native folder can be rebuilt while this Vue component stays mounted.
+      savedExpanded = folder.expanded
       try {
         unmount()
       } finally {
